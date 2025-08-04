@@ -1,0 +1,405 @@
+"use client"
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { ArrowLeftIcon } from 'lucide-react'
+import Link from 'next/link'
+import React, { useEffect, useRef, useState } from 'react'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import z from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import axiosInstance from '@/lib/axios'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { toast } from 'sonner'
+
+const schema = z.object({
+    customer_name: z.string().min(1, "Customer name is required"),
+    invoice_number: z.string().min(1, "Invoice number is required"),
+    customer_phone: z.string().min(1, "Customer phone is required"),
+    customer_email: z.string().min(1, "Customer email is required"),
+    date: z.coerce.date(),
+    notes: z.string().optional(),
+    products: z.array(
+        z.object({
+            productId: z.string().min(1),
+            name: z.string().min(1),
+            quantity: z.coerce.number().min(1),
+            price: z.coerce.number().min(1),
+            stock: z.coerce.number(),
+        })
+    ),
+});
+
+const DISCOUNT_RATE = 0.1; //10% discount
+const TAX_RATE = 0.08; // 8% tax
+
+export default function NewInvoicePage() {
+   const router = useRouter();
+   const [searchTerm, setSearchTerm] = useState("");
+   const searchTimeout = useRef(null);
+   const [loading, setLoading] = useState(false);
+   const [searchResults, setSearchResults] = useState([]);
+   const [subtotal, setSubtotal] = useState(0);
+   const [discountAmount, setDiscountAmount] = useState(0);
+   const [taxAmount, setTaxAmount] = useState(0);
+   const [total, setTotal] = useState(0);
+
+   const form = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+        invoice_number: "",
+        customer_name: "",
+        customer_email: "",
+        customer_phone: "",
+        products: [],
+        date: new Date(),
+        notes: "",
+    },
+   });
+
+   const watchedProducts = useWatch({
+        control: form.control,
+        name: "products",
+    });
+
+    const { fields, append, remove } = useFieldArray({
+        control: form.control,
+        name: "products",
+    })
+
+    function formatDateTimeLocal(date) {
+        const pad = (n) => String(n).padStart(2, "0");
+
+        const year = date.getFullYear();
+        const month = pad(date.getMonth() + 1);
+        const day = pad(date.getDate());
+        const hours = pad(date.getHours());
+        const minutes = pad(date.getMinutes());
+
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    const handleSelectProduct = (product) => {
+        const productExists = form.getValues("products").find(
+            (p) => p.productId === product.id.toString()
+        );
+
+        if(productExists){
+            toast.error("Product already added");
+        }else {
+            append({
+                productId: product.id.toString(),
+                name: product.name,
+                quantity: 1,
+                price: Number(product.price),
+                stock: product.stock,
+            });
+            setSearchTerm("");
+            setSearchResults([]);
+        }
+    }
+
+    useEffect(() => {
+        if(searchTimeout.current) {
+            clearTimeout(searchTimeout.current);
+        }
+
+        if (!searchTerm.trim()) {
+            setSearchResults([]);
+            return;
+        }
+
+        searchTimeout.current = setTimeout(async () => {
+            try {
+                setLoading(true);
+                const res = await axiosInstance.get(
+                    `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/products?filters[name][$containsi]=${searchTerm}&pagination[pageSize]=25`
+                );
+                const products = res.data.data.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    stock: item.stock,
+                }));
+                setSearchResults(products);
+            } catch (error) {
+                console.error("Search failed", error);
+            } finally {
+                setLoading(false);
+            }
+        }, 400)
+    }, [searchTerm])
+
+    const calculateAmount = (quantity, price) => {
+        return quantity * price;
+    }
+
+    useEffect(() => {
+    let newSubtotal = 0;
+    fields.forEach((item, index) => {
+        const quantity = Number(watchedProducts?.[index]?.quantity) || 0;
+        const price = Number(watchedProducts?.[index]?.price) || 0;
+        newSubtotal += calculateAmount(quantity, price);
+    });
+
+    const discount = newSubtotal * DISCOUNT_RATE;
+    const tax = (newSubtotal - discount) * TAX_RATE;
+    const newTotal = newSubtotal - discount + tax;
+
+    setSubtotal(newSubtotal);
+    setDiscountAmount(discount);
+    setTaxAmount(tax);
+    setTotal(newTotal);
+    }, [fields, watchedProducts]);
+
+
+
+    async function onSubmit(data) {
+        console.log('Submitted data:', data);
+    }
+
+  return (
+    <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="w-full p-4 space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <Link href="/dashboard/sales">
+                            <ArrowLeftIcon className="mr-2" />
+                        </Link>
+                        Create new invoice
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Label className="mb-4  text-lg text-primary">Invoice details</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="invoice_number"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Invoice number</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Invoice number" type="" {...field} />
+                                    </FormControl>
+                                     <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="date"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Date & Time</FormLabel>
+                                    <FormControl>
+                                        <Input 
+                                            placeholder="Date & Time" 
+                                            type="datetime-local" 
+                                            {...field}
+                                            className="w-fit"
+                                            value={
+                                                field.value
+                                                    ? formatDateTimeLocal(new Date(field.value))
+                                                    : ""
+                                            }
+                                            onChange={(e) => field.onChange(new Date(e.target.value))}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField 
+                            control={form.control}
+                            name="customer_name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Customer name</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Customer name" type="" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField 
+                            control={form.control}
+                            name="customer_email"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Customer email</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Customer email" type="" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField 
+                            control={form.control}
+                            name="customer_phone"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Customer phone</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Customer phone" type="" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+
+                    <Separator />
+
+                    <Label className="mb-4 text-lg text-primary">Product details</Label>
+                    <div>
+                        <Label className="mb-2">Search Product</Label>
+                        <Input
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Search by product name..." 
+                        />
+
+                        {loading && <p className="text-sm my2">Searching...</p> }
+
+                        {searchResults.length > 0 && (
+                            <ScrollArea className="border rounded p-2 max-h-60 mt-2">
+                                {searchResults.map((product) => (
+                                    <div
+                                        key={product.id}
+                                        className="cursor-pointer p-2 hover:bg-muted rounded"
+                                        onClick={() => handleSelectProduct(product)}
+                                    >
+                                        {product.name} - ${product.price} - {product.stock} in stock
+                                    </div>
+                                ))}
+                            </ScrollArea>
+                        )}
+                    </div>
+
+                    {fields?.map((item, index) => (
+                        <div
+                            key={index}
+                            className="border p-3 rounded mb-2 grid grid-cols-1 md:grid-cols-5 gap-4 items-center"
+                        >
+                            <div>
+                                <Label className="mb-2">Product</Label>
+                                <Input value={item.name} readOnly />
+                            </div>
+                            <div>
+                                <Label className="mb-2">Quantity</Label>
+                                <Input 
+                                    type="number"
+                                    {...form.register(`products.${index}.quantity`, {
+                                        valueAsNumber: true,
+                                        min: 1,
+                                    })}
+                                    defaultValues={item.quantity || 0}
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-2">Price</Label>
+                                <Input 
+                                    type="number"
+                                    {...form.register(`products.${index}.price`, {
+                                        valueAsNumber: true,
+                                        min: 0,
+                                    })}
+                                    defaultValues={item.price}
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-2">Amount</Label>
+                                <Input
+                                    className="text-primary"
+                                    value={calculateAmount(
+                                        form.getValues(`products.${index}.quantity`) || 0,
+                                        form.getValues(`products.${index}.price`) || 0
+                                    )}
+                                    readOnly
+                                />
+                            </div>
+                            <div className="pt-6">
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => remove(index)}
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+
+                    <Separator />
+
+                    <Label className="mb-4 text-lg text-primary">Invoice summary</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <div className="col-span-4">
+                            <FormField 
+                                control={form.control}
+                                name="notes"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Notes</FormLabel>
+                                        <FormControl className="h-36">
+                                            <Textarea 
+                                                placeholder="Additional notes"
+                                                {...field}
+                                                rows={10}
+                                            />
+                                        </FormControl>
+                                         <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+                        <div className="col-span-2 flex flex-col justify-end space-y-2">
+                            <div className="flex justify-between">
+                                <span>Subtotal:</span>
+                                <span>${subtotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Discount ({DISCOUNT_RATE * 100}%):</span>
+                                <span>-${discountAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Tax ({TAX_RATE * 100}%):</span>
+                                <span>${taxAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Total:</span>
+                                <span>${total.toFixed(2)}</span>
+                            </div>
+                            <div className="flex gap-2 w-full items-center">
+                                <Button type="sumbit">Submit Invoice</Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => router.push("/dashboard/sales")}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </form>
+    </Form>
+  )
+}

@@ -421,7 +421,7 @@ export default function NewInvoicePage() {
                             </div>
                             <div className="flex justify-between">
                                 <span>Tax ({TAX_RATE * 100}%):</span>
-                                <span>${taxAmount.toFixed(2)}</span>
+                                <span>+${taxAmount.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Total:</span>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { IconDotsVertical } from "@tabler/icons-react"
 import { format } from "date-fns"
+import Link from "next/link"
 
 export const getColumns = (filters, handleFilterChange, onEdit, onDelete) => [
   {
@@ -85,10 +86,9 @@ export const getColumns = (filters, handleFilterChange, onEdit, onDelete) => [
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem
-              onClick={() => {}}>
-              Download invoice
-            </DropdownMenuItem>
+            <Link href={`/dashboard/sales/invoice/${row.original.documentId}`}>
+             <DropdownMenuItem> View invoice </DropdownMenuItem>
+            </Link>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive"
               onClick={() => {

@@ -49,6 +49,7 @@ export default function NewInvoicePage() {
    const [discountAmount, setDiscountAmount] = useState(0);
    const [taxAmount, setTaxAmount] = useState(0);
    const [total, setTotal] = useState(0);
+   const [saving, setSaving] = useState(false);
 
    const form = useForm({
     resolver: zodResolver(schema),
@@ -158,10 +159,51 @@ export default function NewInvoicePage() {
     setTotal(newTotal);
     }, [fields, watchedProducts]);
 
-
-
     async function onSubmit(data) {
-        console.log('Submitted data:', data);
+        if(data.products.length === 0){
+            toast.error("At least one product is required.");
+            return;
+        }
+        try {
+            const salesPayload = {
+                customer_name: data.customer_name,
+                invoice_number: data.invoice_number,
+                customer_email: data.customer_email,
+                customer_phone: data.customer_phone,
+                date: data.date,
+                notes: data.notes,
+                products: data.products.map((item) => ({
+                    product: item.productId,
+                    quantity: item.quantity,
+                    price: item.price,
+                })),
+                subtotal,
+                discount_amount: discountAmount,
+                tax_amount: taxAmount,
+                total
+            };
+
+            const saleResponse = await axiosInstance.post(
+                `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/sale-transactions`,
+                {
+                    data: salesPayload,
+                }
+            );
+
+            if(!saleResponse.data.data?.id){
+                throw new Error("Failed to create sale.");
+            }
+
+            toast.success("Invoice and stock updateed successfully!");
+            router.push("/dashboard/sales");
+        } catch (error) {
+            console.error("Transaction failed:", error);
+            toast.error(
+                `Transaction failed: ${error.message || "An error occurred."}`
+            );
+        } finally {
+            setSaving(false);
+        }
     }
 
   return (
@@ -386,7 +428,12 @@ export default function NewInvoicePage() {
                                 <span>${total.toFixed(2)}</span>
                             </div>
                             <div className="flex gap-2 w-full items-center">
-                                <Button type="sumbit">Submit Invoice</Button>
+                                <Button 
+                                    type="sumbit"
+                                    disabled={saving}    
+                                >
+                                    {saving ? "Saving..." : "Submit Invoice"}
+                                </Button>
                                 <Button
                                     type="button"
                                     variant="outline"

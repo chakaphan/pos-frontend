@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { DataTable } from "./features/data-table"
+import { DataTable } from "@/components/data-table"
 import { getColumns } from "./features/column"
 import {
   Card,

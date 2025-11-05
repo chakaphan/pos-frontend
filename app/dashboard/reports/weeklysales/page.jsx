@@ -5,7 +5,6 @@ import { DataTable } from "@/components/data-table"
 import { getColumns } from "./features/column"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -26,20 +25,17 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react"
-import { Sheet } from "@/components/ui/sheet"
-import { New } from "./features/new"
 import { toast } from "sonner"
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog"
+import { useRouter } from "next/navigation"
 
 const Page = () => {
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [sales, setSales] = useState([])
+  const [loading, setLoading] = useState(false)
   const [meta, setMeta] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [filters, setFilters] = useState({ name: "", description: "" })
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState(null)
 
   // dialog state
   const [deleteItem, setDeleteItem] = useState(null)
@@ -55,13 +51,35 @@ const Page = () => {
     query.set("pagination[page]", page)
     query.set("pagination[pageSize]", pageSize)
 
-    if (filters.name) {
-      query.set("filters[name][$containsi]", filters.name)
+    if (filters.invoice_number) {
+      query.set("filters[invoice_number][$eqi]", filters.invoice_number)
     }
 
-    if (filters.description) {
-      query.set("filters[description][$containsi]", filters.description)
+    if (filters.customer_name) {
+      query.set("filters[customer_name][$containsi]", filters.customer_name)
     }
+
+    if (filters.customer_email) {
+      query.set("filters[customer_email][$containsi]", filters.customer_email)
+    }
+
+    if (filters.customer_phone) {
+      query.set("filters[customer_phone][$containsi]", filters.customer_phone)
+    }
+
+    // This weeks sales from sunday to saturday
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 (Sun) to 6 (Sat)
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+    endOfWeek.setHours(0, 0, 0, 0);
+
+    query.set("filters[date][$gte]", startOfWeek.toISOString());
+    query.set("filters[date][$lt]", endOfWeek.toISOString());
 
     return query.toString()
   }
@@ -69,19 +87,13 @@ const Page = () => {
   const fetchData = () => {
     setLoading(true)
     axiosInstance
-      .get(`/api/categories?${buildQuery()}`)
+      .get(`/api/sales?${buildQuery()}`)
       .then((response) => {
-        const apiData = response.data.data.map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          documentId: item.documentId,
-        }))
-        setCategories(apiData)
+        setSales(response.data.data)
         setMeta(response.data.meta.pagination)
       })
       .catch((error) => {
-        console.log("Failed to fetch categories:", error)
+        console.log("Failed to fetch sales:", error)
       })
       .finally(() => setLoading(false))
   }
@@ -103,10 +115,6 @@ const Page = () => {
   const columns = getColumns(
     filters,
     handleFilterChange,
-    (item) => {
-      setSelectedItem(item)
-      setSheetOpen(true)
-    },
     handleDelete
   )
 
@@ -114,48 +122,26 @@ const Page = () => {
     <div className="py-4 md:py-6 px-4 lg:px-6">
       <Card className="@container/card">
         <CardHeader>
-          <CardTitle>Categories</CardTitle>
+          <CardTitle>Weekly Sales</CardTitle>
           <CardDescription>
-            <span>List of categories</span>
+            <span>List of this weekly sales</span>
           </CardDescription>
-
-          <CardAction>
-            <Button
-              onClick={() => {
-                setSheetOpen(true)
-                setSelectedItem(null)
-              }}
-            >
-              Add a new record
-            </Button>
-
-            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-              <New
-                item={selectedItem}
-                isOpen={sheetOpen}
-                onSuccess={() => {
-                  setSheetOpen(false)
-                  fetchData()
-                }}
-              />
-            </Sheet>
-          </CardAction>
         </CardHeader>
 
         <CardContent>
           {loading ? (
             <p className="text-muted-foreground">Loading...</p>
           ) : (
-            <DataTable columns={columns} data={categories} />
+            <DataTable columns={columns} data={sales} />
           )}
 
           <div className="flex justify-between items-center mt-4 text-sm text-muted-foreground">
             {meta && (
               <>
-                {categories.length === 0
+                {sales.length === 0
                   ? "No rows"
                   : `Showing ${(meta.page - 1) * meta.pageSize + 1} to ${
-                      (meta.page - 1) * meta.pageSize + categories.length
+                      (meta.page - 1) * meta.pageSize + sales.length
                     } of ${meta.total} rows`}
               </>
             )}
@@ -231,12 +217,12 @@ const Page = () => {
         onConfirm={async () => {
           if (!deleteItem) return
           try {
-            await axiosInstance.delete(`/api/categories/${deleteItem.documentId}`)
+            await axiosInstance.delete(`/api/sales/${deleteItem.documentId}`)
             await fetchData()
-            toast.success("Category deleted successfully")
+            toast.success("Sale deleted successfully")
           } catch (error) {
             console.error("Delete failed:", error)
-            toast.error("Failed to delete category")
+            toast.error("Failed to delete sales record")
           }
         }}
       />

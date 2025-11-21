@@ -73,7 +73,6 @@ const Page = () => {
     axiosInstance
       .get(`/api/products?${buildQuery()}`)
       .then((response) => {
-        console.log("products", response.data.data)
         setProducts(response.data.data)
         setMeta(response.data.meta.pagination)
       })

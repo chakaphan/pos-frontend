@@ -139,7 +139,6 @@ export function AppSidebar({
   ...props
 }) {
   const {data: session} = useSession();
-  console.log(session)
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>

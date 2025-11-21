@@ -154,7 +154,6 @@ export default function POS() {
                 total
             };
 
-            console.log("Sales Payload:", salesPayload);
             const saleResponse = await axiosInstance.post(
                 `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/sale-transactions`,
                 {
